@@ -59,9 +59,18 @@ def run_wizard_flow(page, config):
         try:
             page.wait_for_selector("[id='_region']", timeout=5000)
             print("   🌏 Selecting Region: Malaysia...")
+
+            # Click the dropdown to open it
             page.click("[id='_region']")
-            page.wait_for_timeout(500)
-            page.locator("[id='_region']").get_by_text("Malaysia").click()
+            page.wait_for_timeout(1000) # Wait for animation
+
+            # Click the option
+            # Try multiple selectors for the option to be safe
+            try:
+                page.locator(".select-option").get_by_text("Malaysia").click()
+            except:
+                page.get_by_text("Malaysia").click()
+
             page.wait_for_timeout(1000)
 
             print("   ➡️ Next (Region)...")

@@ -101,25 +101,8 @@ export default function Scanner() {
     setIsBatchProcessing(false);
   };
 
-  // 5. Batch Save
-  const handleSaveAll = async () => {
-    const readyImages = images.filter(img => img.status === 'done' && img.data);
-
-    for (const img of readyImages) {
-      try {
-        await addDoc(collection(db, "router_queue"), {
-          ...img.data,
-          target_ssid: img.data?.target_ssid || "NS-Room-Waitlist",
-          status: "PENDING",
-          created_at: serverTimestamp()
-        });
-        // Remove saved images from queue
-        setImages(prev => prev.filter(i => i.id !== img.id));
-      } catch (e) {
-        console.error("Error saving", img.id, e);
-      }
-    }
-  };
+  // 5. Batch Save (Deprecated/Removed from UI but kept for reference if needed, or I can remove it entirely. I'll remove it entirely as requested.)
+  // Removing handleSaveAll entirely as per user request to remove the button.
 
   // 6. Download CSV
   const handleDownloadCSV = () => {
@@ -249,13 +232,6 @@ export default function Scanner() {
                   className="bg-green-600 hover:bg-green-700 text-white"
                 >
                   <FileDown className="w-4 h-4 mr-2" /> Download CSV
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSaveAll}
-                  disabled={images.filter(i => i.status === 'done').length === 0}
-                >
-                  <Save className="w-4 h-4 mr-2" /> Save All
                 </Button>
               </div>
             </div>
