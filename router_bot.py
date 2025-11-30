@@ -95,46 +95,6 @@ def run_wizard_flow(page, config):
         print("   🧙 Running Wizard...")
         page.wait_for_timeout(2000)
 
-        # Step 1: Region Selection
-        try:
-            # Check if we are actually on the wizard page
-            if not page.is_visible("[id='_region']"):
-                 print("   ⚠️ Region selector not found. Checking where we are...")
-                 save_debug_artifact(page, "pre_region_check")
-
-            page.wait_for_selector("[id='_region']", timeout=5000)
-            print("   🌏 Selecting Region: Malaysia...")
-
-            # Click the dropdown to open it
-            page.click("[id='_region']")
-            page.wait_for_timeout(1000) # Wait for animation
-
-            # Click the option
-            # Try multiple selectors for the option to be safe
-            try:
-                page.locator(".select-option").get_by_text("Malaysia").click()
-            except:
-                page.get_by_text("Malaysia").click()
-
-            page.wait_for_timeout(1000)
-
-            print("   ➡️ Next (Region)...")
-            page.get_by_role("button", name="Next").click()
-            page.wait_for_timeout(2000)
-
-            print("   ➡️ Next (Time Zone/Connection Type)...")
-            page.get_by_role("button", name="Next").click()
-            page.wait_for_timeout(2000)
-        except Exception as e:
-            print(f"   ⚠️ Region/Timezone step skipped or failed: {e}")
-            save_debug_artifact(page, "region_step_fail")
-
-        # Step 3: Wireless Settings
-        print("   📶 Configuring Wireless (Dual Band Mode)...")
-
-        # SKIP Band Steering (We want separate names)
-        # if page.is_visible(".icon.checkbox-hover-unchecked"):
-        #     print("   🔀 Enabling Band Steering (Smart Connect)...")
         #     page.locator(".icon.checkbox-hover-unchecked").click()
         #     page.wait_for_timeout(1000)
 
