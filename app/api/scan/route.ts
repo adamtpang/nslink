@@ -15,38 +15,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No image provided' }, { status: 400 });
     }
 
-    // Prompt optimized for Llama 3.2 Vision
-    const prompt = `
-    You are a router configuration assistant. Analyze this image of a router label.
-    Extract the following information and return it in strict JSON format:
-    - serial_number: The S/N or Serial Number.
-    - default_ssid: The 2.4GHz SSID or default SSID.
-    - default_pass: The Wireless Password, PIN, or Key.
-    - target_ssid: (Leave empty/null, this is for user input later)
+    // Gemini on Replicate typically expects a prompt and image input
+    // We use the alias 'google/gemini-1.5-pro'
 
-    If a field is not found, return null for that field.
-    Do not include any markdown formatting (like \`\`\`json). Just return the raw JSON object.
+    const prompt = `
+    Analyze this router label image. Extract the following fields strictly in JSON format:
+    - serial_number (Labelled as S/N)
+    - default_ssid (Labelled as "2.4G SSID" or just "SSID". If multiple, prefer 2.4G. Example: "B4B@celcomdigi_2.4Ghz")
+    - default_pass (Labelled as "Wireless Password/PIN" or "Password")
+    - target_ssid (Leave this null, user will input later)
+
+    If a field is not visible, return null.
+    Do not guess.
+    Return ONLY raw JSON. No markdown code blocks.
     `;
 
     const output = await replicate.run(
-      "meta/llama-3.2-11b-vision-instruct:06a3075882e9ddc333c55a847d74da943f42a91257d7a5e1c5ace3743e914d5f",
+      "google/gemini-1.5-pro",
       {
         input: {
           image: image,
           prompt: prompt,
-          max_tokens: 512,
-          temperature: 0.1 // Low temperature for deterministic output
         }
       }
     );
 
-    // Replicate returns an array of strings for streaming, or a single string.
-    // Llama 3.2 Vision usually returns a stream of tokens. We need to join them.
+    // Replicate output for Gemini might be a stream or string.
+    // We handle both cases.
     const resultText = Array.isArray(output) ? output.join("") : String(output);
 
-    console.log("Replicate Output:", resultText);
+    console.log("Replicate Gemini Output:", resultText);
 
-    // Clean up the output to ensure it's valid JSON
+    // Cleanup JSON markdown if present
     const jsonString = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
 
     try {
@@ -54,10 +54,15 @@ export async function POST(req: Request) {
       return NextResponse.json(parsedData);
     } catch (e) {
       console.error("JSON Parse Error:", e);
-      // Fallback: Try to find JSON-like structure if parsing fails
-      const match = jsonString.match(/\{[\s\S]*\}/);
-      if (match) {
-        return NextResponse.json(JSON.parse(match[0]));
+      // Fallback regex extraction
+      const snMatch = resultText.match(/S\/N[:\s]*([A-Z0-9]+)/i);
+      if (snMatch) {
+        return NextResponse.json({
+          serial_number: snMatch[1],
+          default_ssid: "",
+          default_pass: "",
+          target_ssid: null
+        });
       }
       return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 });
     }
