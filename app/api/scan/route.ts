@@ -3,11 +3,11 @@ import { NextResponse } from "next/server";
 
 // Hard to Vary: Define the Strict Schema we want
 const PROMPT = `
-Analyze this router label image. Extract the following fields strictly in JSON format:
-- serial_number (S/N or SN)
-- default_ssid (SSID)
-- default_pass (Wireless Password/Key/PIN)
-- mac_address
+Analyze this router label image (likely CelcomDigi TP-Link). Extract the following fields strictly in JSON format:
+- serial_number (Labelled as S/N)
+- default_ssid (Labelled as "2.4G SSID" or just "SSID". If multiple, prefer 2.4G)
+- default_pass (Labelled as "Wireless Password/PIN" or "Password")
+- mac_address (Labelled as MAC)
 
 If a field is not visible, return null.
 Do not guess.

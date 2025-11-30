@@ -1,78 +1,148 @@
 import csv
 import time
 from playwright.sync_api import sync_playwright
-import wifi_tools  # Your new module
-import router_bot  # Your refactored logic
+import wifi_tools
+import router_bot
+
+def load_queue():
+    queue_file = 'router_queue.csv'
+    try:
+        with open(queue_file, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            return list(reader)
+    except Exception as e:
+        print(f"❌ Error loading queue: {e}")
+        return []
 
 def run_router_mill():
-    # 1. Load the Queue
-    queue_file = 'router_queue.csv'
-    # EXPECTED CSV HEADERS: Location ID, S/N, SIM ID, Default SSID, Default Pass, New SSID
+    print("🏭 NS ROUTER MILL: FACTORY MODE ACTIVATED")
+    print("   Scanning for routers in queue... (Ctrl+C to stop)\n")
 
-    print(f"📂 Loading {queue_file}...")
-    with open(queue_file, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
-        queue = list(reader)
+    completed_sns = set()
 
-    print(f"🔥 Loaded {len(queue)} routers to configure.\n")
+    while True:
+        queue = load_queue()
+        pending_routers = [r for r in queue if r['S/N'] not in completed_sns]
 
-    for index, row in enumerate(queue):
-        print(f"==========================================")
-        print(f"🛠️  PROCESSING ROUTER {index + 1}/{len(queue)}")
-        print(f"    Target: {row['S/N']} -> {row['New SSID']}")
-        print(f"==========================================")
-
-        # A. CONNECT TO ROUTER (The OS Hand)
-        # You need to ensure your CSV has 'Default SSID' and 'Default Pass'
-        # If not, you might calculate it or prompt user.
-        default_ssid = row.get('Default SSID')
-        default_pass = row.get('Default Pass') # Or calculate from S/N?
-
-        if not default_ssid:
-            print("❌ MISSING DATA: No Default SSID in CSV.")
+        if not pending_routers:
+            print("✅ All routers in queue processed! Waiting for new entries...")
+            time.sleep(5)
             continue
 
-        print(f"1️⃣  Switching WiFi to {default_ssid}...")
-        connected = wifi_tools.connect_to_wifi(default_ssid, default_pass)
+        # 1. SCAN THE AIRWAVES
+        visible_ssids = wifi_tools.get_visible_ssids()
+        target_found = None
+
+        print(f"📡 Scanning... ({len(visible_ssids)} networks found)")
+
+        for row in pending_routers:
+            base_ssid = row['Default SSID'].replace("_2.4Ghz", "").replace("_5Ghz", "")
+
+            ssid_24 = f"{base_ssid}_2.4Ghz"
+            ssid_5 = f"{base_ssid}_5Ghz"
+
+            if ssid_24 in visible_ssids:
+                print(f"   🎯 MATCH! Found {ssid_24} (Target: {row['S/N']})")
+                target_found = row
+                target_found['Connect SSID'] = ssid_24
+                break
+
+            if ssid_5 in visible_ssids:
+                print(f"   🎯 MATCH! Found {ssid_5} (Target: {row['S/N']})")
+                target_found = row
+                target_found['Connect SSID'] = ssid_5
+                break
+
+        if not target_found:
+            if len(visible_ssids) > 0:
+                print(f"   ⚠️ No match found. Visible: {visible_ssids}")
+            time.sleep(3)
+            continue
+
+        # 2. PROCESS THE FOUND ROUTER
+        row = target_found
+        print(f"\n==========================================")
+        print(f"🛠️  PROCESSING: {row['S/N']}")
+        print(f"    Connect: {row['Connect SSID']}")
+        print(f"    Target:  {row['New SSID']}")
+        print(f"==========================================")
+
+        # --- PHASE 1: INITIAL SETUP (WIZARD) ---
+        print(f"1️⃣  [PHASE 1] Connecting to {row['Connect SSID']}...")
+        connected = wifi_tools.connect_to_wifi(row['Connect SSID'], row['Default Pass'])
 
         if not connected:
-            print("❌ Failed to connect to router. Is it plugged in and reset?")
-            response = input("   (r)etry or (s)kip? ")
-            if response.lower() == 's': continue
-            # Retry logic could go here
+            print("❌ Connection failed. Retrying scan...")
             continue
 
-        # B. CONFIGURE ROUTER (The Browser Eye)
-        print("2️⃣  Launching Browser Configuration...")
-
-        # Prepare the config object
+        print("2️⃣  [PHASE 1] Running Factory Reset Wizard...")
         config = {
-            'router_url': "http://192.168.1.1", # Or 0.1, depends on model
-            'login_user': "customer", # Or from CSV
-            'login_pass': "celcomdigi123", # Or from CSV
+            'router_url': "http://192.168.1.1",
+            'login_user': "customer",
+            'login_pass': "celcomdigi123",
             'new_ssid': row['New SSID'],
             'new_wifi_pass': "darktalent2024!",
             'new_admin_pass': "darktalent2024!"
         }
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=False)
-            context = browser.new_context()
-            page = context.new_page()
+        success_p1 = False
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=False)
+                context = browser.new_context()
+                page = context.new_page()
+                success_p1 = router_bot.run_wizard_flow(page, config)
+                browser.close()
+        except Exception as e:
+            print(f"❌ Playwright Error: {e}")
 
-            success = router_bot.configure_router_logic(page, config)
+        if not success_p1:
+            print("❌ Phase 1 Failed. Aborting this router.")
+            continue
 
-            browser.close()
+        # --- INTERMISSION: RECONNECT ---
+        print("\n🔄 Router is rebooting. Waiting 45s for new SSID...")
+        time.sleep(45)
 
-        if success:
-            print(f"✅ Router {row['S/N']} Configured Successfully!")
-            # Optional: Write status back to CSV or a log file
+        # Reconnect to the new 2.4GHz SSID
+        new_ssid_24 = f"{row['New SSID']} 2.4Ghz"
+        new_pass = "darktalent2024!"
+
+        print(f"3️⃣  [PHASE 2] Connecting to New WiFi: {new_ssid_24}...")
+        reconnected = False
+        for _ in range(3):
+            if wifi_tools.connect_to_wifi(new_ssid_24, new_pass):
+                reconnected = True
+                break
+            print("   Retrying connection...")
+            time.sleep(5)
+
+        if not reconnected:
+            print("❌ Failed to reconnect. Admin Config skipped.")
+            continue
+
+        # --- PHASE 2: ADMIN CONFIG ---
+        print("4️⃣  [PHASE 2] Configuring Admin Password...")
+        success_p2 = False
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=False)
+                context = browser.new_context()
+                page = context.new_page()
+                success_p2 = router_bot.run_admin_flow(page, config)
+                browser.close()
+        except Exception as e:
+            print(f"❌ Playwright Error: {e}")
+
+        if success_p2:
+            print(f"✅ Router {row['S/N']} FULLY CONFIGURED!")
+            completed_sns.add(row['S/N'])
         else:
-            print(f"❌ Failed to configure {row['S/N']}")
+            print(f"⚠️ Router {row['S/N']} Partial Config (WiFi OK, Admin Failed).")
 
         print("------------------------------------------")
-        print("Waiting 10s before next router (swap time)...")
-        time.sleep(10)
+        print("Resuming Scan in 5s...")
+        time.sleep(5)
 
 if __name__ == "__main__":
     run_router_mill()

@@ -2,9 +2,15 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import Webcam from 'react-webcam';
-import { Camera, Save, RotateCcw, Zap, CheckCircle, Smartphone } from 'lucide-react';
+import { Camera, Save, RotateCcw, Zap, CheckCircle, Smartphone, ScanLine } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { MotionWrapper, MotionItem } from "@/components/motion-wrapper";
 
 export default function Scanner() {
   const webcamRef = useRef<Webcam>(null);
@@ -13,12 +19,10 @@ export default function Scanner() {
   const [scannedData, setScannedData] = useState<any>(null);
   const [status, setStatus] = useState<string>('');
 
-  // Camera settings for mobile (rear camera)
   const videoConstraints = {
     facingMode: { exact: "environment" }
   };
 
-  // 1. Capture Image
   const capture = useCallback(() => {
     const imageSrc = webcamRef.current?.getScreenshot();
     if (imageSrc) {
@@ -27,7 +31,6 @@ export default function Scanner() {
     }
   }, [webcamRef]);
 
-  // 2. Send to Gemini Flash (Server-Side)
   const processImage = async (base64Image: string) => {
     setLoading(true);
     setStatus('Analyzing Label...');
@@ -50,7 +53,6 @@ export default function Scanner() {
     }
   };
 
-  // 3. Save to Firestore "Queue"
   const handleSave = async () => {
     if (!scannedData) return;
     setStatus('Saving to Queue...');
@@ -60,13 +62,12 @@ export default function Scanner() {
         serial_number: scannedData.serial_number,
         default_ssid: scannedData.default_ssid,
         default_pass: scannedData.default_pass,
-        sim_id: scannedData.sim_id || "", // Manual entry might be needed for SIM
-        target_ssid: `NS-Room-Waitlist`, // Default target, changeable later
-        status: "PENDING", // Ready for Python script
+        sim_id: scannedData.sim_id || "",
+        target_ssid: scannedData.target_ssid || "NS-Room-Waitlist",
+        status: "PENDING",
         created_at: serverTimestamp()
       });
 
-      // Reset for next router
       setImgSrc(null);
       setScannedData(null);
       setStatus('Saved! Ready for next.');
@@ -84,117 +85,158 @@ export default function Scanner() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-900 text-green-500 font-mono p-4 flex flex-col items-center">
-      <div className="w-full max-w-md flex justify-between items-center mb-6 border-b border-green-800 pb-2">
-        <h1 className="text-xl font-bold flex items-center gap-2">
-          <Zap className="w-5 h-5" /> NS_INGEST
-        </h1>
-        <span className="text-xs text-green-700 animate-pulse">SYSTEM_ONLINE</span>
-      </div>
+    <div className="min-h-screen bg-background text-foreground font-sans p-4 flex flex-col items-center justify-center">
+      <MotionWrapper animation="fadeIn" className="w-full max-w-md space-y-6">
 
-      <div className="w-full max-w-md bg-black border border-green-800 rounded-lg overflow-hidden relative min-h-[400px] flex flex-col justify-center">
-        {/* Camera View */}
-        {!imgSrc && (
-          <>
-            <Webcam
-              audio={false}
-              ref={webcamRef}
-              screenshotFormat="image/jpeg"
-              videoConstraints={videoConstraints}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute bottom-4 left-0 right-0 flex justify-center">
-              <button
-                onClick={capture}
-                className="bg-green-600 hover:bg-green-500 text-black rounded-full p-4 shadow-[0_0_20px_rgba(34,197,94,0.5)] transition-all active:scale-95"
-              >
-                <Camera size={32} />
-              </button>
+        {/* Header */}
+        <div className="flex justify-between items-center border-b border-border pb-4">
+          <div className="flex items-center gap-2">
+            <div className="p-2 bg-primary/10 rounded-full">
+              <Zap className="w-5 h-5 text-primary" />
             </div>
-            {/* Overlay Grid */}
-            <div className="absolute inset-0 pointer-events-none border-2 border-green-500/30 m-8 rounded-lg">
-              <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-green-500"></div>
-              <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-green-500"></div>
-              <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-green-500"></div>
-              <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-green-500"></div>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight">NS_LINK</h1>
+              <p className="text-xs text-muted-foreground">Router Ingestion System</p>
             </div>
-          </>
-        )}
+          </div>
+          <span className="text-xs font-mono text-primary bg-primary/10 px-2 py-1 rounded animate-pulse">
+            ONLINE
+          </span>
+        </div>
 
-        {/* Review View */}
-        {imgSrc && (
-          <div className="p-4 space-y-4">
-            <img src={imgSrc} alt="Scanned" className="w-full h-48 object-cover rounded border border-green-800 opacity-50" />
+        {/* Main Card */}
+        <Card className="overflow-hidden border-primary/20 shadow-lg shadow-primary/5">
+          <CardContent className="p-0 relative min-h-[400px] flex flex-col justify-center bg-black/50">
 
-            {loading ? (
-              <div className="text-center py-8 animate-pulse">
-                <p>EXTRACTING_DATA...</p>
-                <p className="text-xs text-green-700">Gemini Flash Vision Active</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {/* Editable Fields */}
-                <div className="space-y-1">
-                  <label className="text-xs text-green-700">SERIAL_NUMBER</label>
-                  <input
-                    value={scannedData?.serial_number || ''}
-                    onChange={(e) => setScannedData({...scannedData, serial_number: e.target.value})}
-                    className="w-full bg-neutral-900 border border-green-800 p-2 rounded text-white focus:outline-none focus:border-green-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-green-700">DEFAULT_SSID</label>
-                  <input
-                    value={scannedData?.default_ssid || ''}
-                    onChange={(e) => setScannedData({...scannedData, default_ssid: e.target.value})}
-                    className="w-full bg-neutral-900 border border-green-800 p-2 rounded text-white focus:outline-none focus:border-green-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs text-green-700">DEFAULT_PASS</label>
-                  <input
-                    value={scannedData?.default_pass || ''}
-                    onChange={(e) => setScannedData({...scannedData, default_pass: e.target.value})}
-                    className="w-full bg-neutral-900 border border-green-800 p-2 rounded text-white focus:outline-none focus:border-green-500"
-                  />
-                </div>
-                {/* Optional SIM Field if you scan SIM card separately or same time */}
-                <div className="space-y-1">
-                  <label className="text-xs text-green-700">SIM_ICCID (Optional)</label>
-                  <input
-                    value={scannedData?.sim_id || ''}
-                    onChange={(e) => setScannedData({...scannedData, sim_id: e.target.value})}
-                    placeholder="Scan SIM next or type..."
-                    className="w-full bg-neutral-900 border border-green-800 p-2 rounded text-white focus:outline-none focus:border-green-500"
-                  />
+            {/* Camera View */}
+            {!imgSrc && (
+              <div className="relative h-full">
+                <Webcam
+                  audio={false}
+                  ref={webcamRef}
+                  screenshotFormat="image/jpeg"
+                  videoConstraints={videoConstraints}
+                  className="w-full h-[400px] object-cover"
+                />
+
+                {/* Overlay UI */}
+                <div className="absolute inset-0 flex flex-col justify-between p-6 pointer-events-none">
+                  <div className="w-full h-full border-2 border-primary/30 rounded-lg relative">
+                    <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-primary rounded-tl-lg" />
+                    <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-primary rounded-tr-lg" />
+                    <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-primary rounded-bl-lg" />
+                    <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-primary rounded-br-lg" />
+
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <ScanLine className="w-64 h-64 text-primary/20 animate-pulse" />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex gap-2 mt-4">
-                  <button
-                    onClick={handleRetake}
-                    className="flex-1 bg-red-900/30 text-red-500 border border-red-900 p-3 rounded flex justify-center items-center gap-2 hover:bg-red-900/50"
+                <div className="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-auto">
+                  <Button
+                    onClick={capture}
+                    size="icon"
+                    className="h-16 w-16 rounded-full shadow-[0_0_30px_rgba(34,197,94,0.4)] border-4 border-background hover:scale-105 transition-transform"
                   >
-                    <RotateCcw size={18} /> RETAKE
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    className="flex-1 bg-green-600 text-black p-3 rounded flex justify-center items-center gap-2 font-bold hover:bg-green-500"
-                  >
-                    <Save size={18} /> SAVE
-                  </button>
+                    <Camera className="w-8 h-8" />
+                  </Button>
                 </div>
               </div>
             )}
-          </div>
-        )}
-      </div>
 
-      {status && (
-        <div className="mt-4 flex items-center gap-2 text-sm text-green-400 bg-green-900/20 px-4 py-2 rounded-full border border-green-900/50">
-           {status.includes("Saved") ? <CheckCircle size={16} /> : <Smartphone size={16} />}
-           {status}
-        </div>
-      )}
+            {/* Review View */}
+            {imgSrc && (
+              <MotionWrapper animation="scaleIn" className="p-6 space-y-6 bg-card">
+                <div className="relative rounded-lg overflow-hidden border border-border">
+                  <img src={imgSrc} alt="Scanned" className="w-full h-48 object-cover opacity-75" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-background/90 to-transparent" />
+                  <div className="absolute bottom-2 left-2">
+                    <span className="text-xs bg-black/50 text-white px-2 py-1 rounded backdrop-blur-sm">
+                      CAPTURED
+                    </span>
+                  </div>
+                </div>
+
+                {loading ? (
+                  <div className="text-center py-8 space-y-2">
+                    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+                    <p className="text-sm font-medium animate-pulse">Extracting Data...</p>
+                    <p className="text-xs text-muted-foreground">Gemini Flash Vision Active</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid gap-4">
+                      <div className="space-y-2">
+                        <Label>Serial Number</Label>
+                        <Input
+                          value={scannedData?.serial_number || ''}
+                          onChange={(e) => setScannedData({ ...scannedData, serial_number: e.target.value })}
+                          className="font-mono"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Default SSID</Label>
+                          <Input
+                            value={scannedData?.default_ssid || ''}
+                            onChange={(e) => setScannedData({ ...scannedData, default_ssid: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Default Pass</Label>
+                          <Input
+                            value={scannedData?.default_pass || ''}
+                            onChange={(e) => setScannedData({ ...scannedData, default_pass: e.target.value })}
+                            type="text"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-primary">Target SSID (New Name)</Label>
+                        <Input
+                          value={scannedData?.target_ssid || ''}
+                          onChange={(e) => setScannedData({ ...scannedData, target_ssid: e.target.value })}
+                          placeholder="e.g. NS Room 8019"
+                          className="border-primary/50 bg-primary/5 font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                      <Button variant="outline" onClick={handleRetake} className="flex-1 gap-2">
+                        <RotateCcw className="w-4 h-4" /> Retake
+                      </Button>
+                      <Button onClick={handleSave} className="flex-1 gap-2 font-bold">
+                        <Save className="w-4 h-4" /> Save to Queue
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </MotionWrapper>
+            )}
+
+          </CardContent>
+        </Card>
+
+        {/* Status Toast */}
+        {status && (
+          <MotionWrapper animation="slideInLeft" className="flex justify-center">
+            <div className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium border shadow-lg backdrop-blur-sm",
+              status.includes("Saved")
+                ? "bg-green-500/10 text-green-500 border-green-500/20"
+                : "bg-primary/10 text-primary border-primary/20"
+            )}>
+              {status.includes("Saved") ? <CheckCircle size={16} /> : <Smartphone size={16} />}
+              {status}
+            </div>
+          </MotionWrapper>
+        )}
+
+      </MotionWrapper>
     </div>
   );
 }
