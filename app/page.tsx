@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import Webcam from 'react-webcam';
-import { Camera, Save, RotateCcw, Zap, CheckCircle, Smartphone, ScanLine, Upload, Trash2, Play, Plus } from 'lucide-react';
+import { Camera, Save, RotateCcw, Zap, CheckCircle, Smartphone, ScanLine, Upload, Trash2, Play, Plus, FileDown } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { cn } from "@/lib/utils";
@@ -121,6 +121,30 @@ export default function Scanner() {
     }
   };
 
+  // 6. Download CSV
+  const handleDownloadCSV = () => {
+    const readyImages = images.filter(img => img.status === 'done' && img.data);
+    if (readyImages.length === 0) return;
+
+    const headers = ["serial_number", "default_ssid", "default_pass", "target_ssid"];
+    const csvContent = [
+      headers.join(","),
+      ...readyImages.map(img => {
+        const d = img.data!;
+        return [d.serial_number, d.default_ssid, d.default_pass, d.target_ssid || ""].join(",");
+      })
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'router_queue.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const removeImage = (id: string) => {
     setImages(prev => prev.filter(img => img.id !== id));
   };
@@ -217,6 +241,14 @@ export default function Scanner() {
                   disabled={isBatchProcessing || images.length === 0}
                 >
                   <Play className="w-4 h-4 mr-2" /> Analyze All
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleDownloadCSV}
+                  disabled={images.filter(i => i.status === 'done').length === 0}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <FileDown className="w-4 h-4 mr-2" /> Download CSV
                 </Button>
                 <Button
                   size="sm"
