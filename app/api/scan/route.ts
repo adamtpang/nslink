@@ -1,49 +1,69 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
+import Replicate from "replicate";
 
-// Hard to Vary: Define the Strict Schema we want
-const PROMPT = `
-Analyze this router label image (likely CelcomDigi TP-Link). Extract the following fields strictly in JSON format:
-- serial_number (Labelled as S/N)
-- default_ssid (Labelled as "2.4G SSID" or just "SSID". If multiple, prefer 2.4G)
-- default_pass (Labelled as "Wireless Password/PIN" or "Password")
-- mac_address (Labelled as MAC)
+const replicate = new Replicate({
+  auth: process.env.REPLICATE_API_TOKEN,
+});
 
-If a field is not visible, return null.
-Do not guess.
-Return ONLY raw JSON.
-`;
+export const maxDuration = 60; // Allow longer timeout for AI
 
 export async function POST(req: Request) {
   try {
     const { image } = await req.json();
 
-    // Remove data:image/jpeg;base64, prefix if present
-    const base64Image = image.replace(/^data:image\/\w+;base64,/, "");
+    if (!image) {
+      return NextResponse.json({ error: 'No image provided' }, { status: 400 });
+    }
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // Prompt optimized for Llama 3.2 Vision
+    const prompt = `
+    You are a router configuration assistant. Analyze this image of a router label.
+    Extract the following information and return it in strict JSON format:
+    - serial_number: The S/N or Serial Number.
+    - default_ssid: The 2.4GHz SSID or default SSID.
+    - default_pass: The Wireless Password, PIN, or Key.
+    - target_ssid: (Leave empty/null, this is for user input later)
 
-    const result = await model.generateContent([
-      PROMPT,
+    If a field is not found, return null for that field.
+    Do not include any markdown formatting (like \`\`\`json). Just return the raw JSON object.
+    `;
+
+    const output = await replicate.run(
+      "meta/llama-3.2-11b-vision-instruct:06a3075882e9ddc333c55a847d74da943f42a91257d7a5e1c5ace3743e914d5f",
       {
-        inlineData: {
-          data: base64Image,
-          mimeType: "image/jpeg",
-        },
-      },
-    ]);
+        input: {
+          image: image,
+          prompt: prompt,
+          max_tokens: 512,
+          temperature: 0.1 // Low temperature for deterministic output
+        }
+      }
+    );
 
-    const response = await result.response;
-    const text = response.text();
+    // Replicate returns an array of strings for streaming, or a single string.
+    // Llama 3.2 Vision usually returns a stream of tokens. We need to join them.
+    const resultText = Array.isArray(output) ? output.join("") : String(output);
 
-    // Cleanup JSON markdown if Gemini adds it
-    const jsonString = text.replace(/```json/g, "").replace(/```/g, "").trim();
-    const data = JSON.parse(jsonString);
+    console.log("Replicate Output:", resultText);
 
-    return NextResponse.json(data);
+    // Clean up the output to ensure it's valid JSON
+    const jsonString = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
+
+    try {
+      const parsedData = JSON.parse(jsonString);
+      return NextResponse.json(parsedData);
+    } catch (e) {
+      console.error("JSON Parse Error:", e);
+      // Fallback: Try to find JSON-like structure if parsing fails
+      const match = jsonString.match(/\{[\s\S]*\}/);
+      if (match) {
+        return NextResponse.json(JSON.parse(match[0]));
+      }
+      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 });
+    }
+
   } catch (error) {
-    console.error("AI Scan Error:", error);
-    return NextResponse.json({ error: "Scan Failed" }, { status: 500 });
+    console.error('Scan Error:', error);
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

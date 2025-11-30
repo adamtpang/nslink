@@ -17,6 +17,7 @@
     "react-webcam": "^7.2.0",
     "firebase": "^10.0.0",
     "@google/generative-ai": "^0.1.0",
+    "replicate": "^0.25.2",
     "clsx": "^2.0.0",
     "tailwind-merge": "^2.0.0",
     "class-variance-authority": "^0.7.0",
