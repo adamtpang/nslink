@@ -15,8 +15,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No image provided' }, { status: 400 });
     }
 
-    // Gemini on Replicate typically expects a prompt and image input
-    // We use the alias 'google/gemini-1.5-pro'
+    // User requested "google/gemini-3-pro" specifically.
+    // Reference input: { images: [...], prompt: "..." }
 
     const prompt = `
     Analyze this router label image. Extract the following fields strictly in JSON format:
@@ -30,21 +30,22 @@ export async function POST(req: Request) {
     Return ONLY raw JSON. No markdown code blocks.
     `;
 
+    // Note: Using 'images' array as per user reference, although 'image' is common.
+    // We pass the data URI directly.
     const output = await replicate.run(
-      "google/gemini-1.5-pro",
+      "google/gemini-3-pro",
       {
         input: {
-          image: image,
+          images: [image],
           prompt: prompt,
         }
       }
     );
 
-    // Replicate output for Gemini might be a stream or string.
-    // We handle both cases.
+    // Handle potential stream or string output
     const resultText = Array.isArray(output) ? output.join("") : String(output);
 
-    console.log("Replicate Gemini Output:", resultText);
+    console.log("Replicate Gemini 3 Output:", resultText);
 
     // Cleanup JSON markdown if present
     const jsonString = resultText.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -69,6 +70,7 @@ export async function POST(req: Request) {
 
   } catch (error) {
     console.error('Scan Error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    // Log the specific error message from Replicate to help debugging
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal Server Error' }, { status: 500 });
   }
 }
