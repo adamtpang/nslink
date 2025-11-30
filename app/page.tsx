@@ -1,15 +1,3 @@
-"use client";
-
-import React, { useState, useRef, useCallback } from 'react';
-import Webcam from 'react-webcam';
-import { Camera, Save, RotateCcw, Zap, CheckCircle, Smartphone, ScanLine } from 'lucide-react';
-import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { MotionWrapper, MotionItem } from "@/components/motion-wrapper";
 
 export default function Scanner() {
