@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import Webcam from 'react-webcam';
-import { Camera, Save, RotateCcw, Zap, CheckCircle, Smartphone, ScanLine, Upload, Trash2, Play, Plus, FileDown } from 'lucide-react';
+import { Camera, Save, RotateCcw, Zap, CheckCircle, Smartphone, ScanLine, Upload, Trash2, Play, Plus, FileDown, Table, X } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { cn } from "@/lib/utils";
@@ -31,6 +31,7 @@ export default function Scanner() {
   const [images, setImages] = useState<ScannedImage[]>([]);
   const [activeTab, setActiveTab] = useState("camera");
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   const videoConstraints = {
     facingMode: { exact: "environment" }
@@ -69,18 +70,40 @@ export default function Scanner() {
 
   // 3. Process Single Image (Helper)
   const analyzeImage = async (img: ScannedImage) => {
-    try {
-      const response = await fetch('/api/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: img.src }),
-      });
-      const data = await response.json();
-      return { ...img, status: 'done' as const, data };
-    } catch (error) {
-      console.error(error);
-      return { ...img, status: 'error' as const };
+    let attempts = 0;
+    const maxAttempts = 3;
+
+    while (attempts < maxAttempts) {
+      try {
+        attempts++;
+        const response = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: img.src }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // Basic validation: Check if we got at least a serial number or an empty object that isn't an error
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        return { ...img, status: 'done' as const, data };
+      } catch (error) {
+        console.error(`Attempt ${attempts} failed:`, error);
+        if (attempts === maxAttempts) {
+          return { ...img, status: 'error' as const };
+        }
+        // Wait 1s before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
     }
+    return { ...img, status: 'error' as const };
   };
 
   // 4. Batch Analyze
@@ -101,22 +124,24 @@ export default function Scanner() {
     setIsBatchProcessing(false);
   };
 
-  // 5. Batch Save (Deprecated/Removed from UI but kept for reference if needed, or I can remove it entirely. I'll remove it entirely as requested.)
-  // Removing handleSaveAll entirely as per user request to remove the button.
+  // 5. Generate CSV Content
+  const generateCSVContent = () => {
+    const readyImages = images.filter(img => img.status === 'done' && img.data);
+    if (readyImages.length === 0) return null;
+
+    const headers = ["serial_number", "default_ssid", "default_pass", "target_ssid"];
+    const csvRows = readyImages.map(img => {
+      const d = img.data!;
+      return [d.serial_number, d.default_ssid, d.default_pass, d.target_ssid || ""].join(",");
+    });
+
+    return [headers.join(","), ...csvRows].join("\n");
+  };
 
   // 6. Download CSV
   const handleDownloadCSV = () => {
-    const readyImages = images.filter(img => img.status === 'done' && img.data);
-    if (readyImages.length === 0) return;
-
-    const headers = ["serial_number", "default_ssid", "default_pass", "target_ssid"];
-    const csvContent = [
-      headers.join(","),
-      ...readyImages.map(img => {
-        const d = img.data!;
-        return [d.serial_number, d.default_ssid, d.default_pass, d.target_ssid || ""].join(",");
-      })
-    ].join("\n");
+    const csvContent = generateCSVContent();
+    if (!csvContent) return;
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -225,6 +250,16 @@ export default function Scanner() {
                 >
                   <Play className="w-4 h-4 mr-2" /> Analyze All
                 </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowPreview(true)}
+                  disabled={images.filter(i => i.status === 'done').length === 0}
+                >
+                  <Table className="w-4 h-4 mr-2" /> Preview CSV
+                </Button>
+
                 <Button
                   size="sm"
                   onClick={handleDownloadCSV}
@@ -318,6 +353,53 @@ export default function Scanner() {
         </div>
 
       </MotionWrapper>
+
+      {/* PREVIEW MODAL */}
+      {showPreview && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <MotionWrapper animation="scaleIn" className="w-full max-w-3xl bg-background border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+            <div className="flex justify-between items-center p-4 border-b border-border bg-muted/30">
+              <div className="flex items-center gap-2">
+                <Table className="w-5 h-5 text-primary" />
+                <h3 className="font-bold">CSV Preview</h3>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setShowPreview(false)}>
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+
+            <div className="p-0 overflow-auto flex-1 bg-card">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs uppercase bg-muted/50 sticky top-0">
+                  <tr>
+                    <th className="px-4 py-3">Serial Number</th>
+                    <th className="px-4 py-3">Default SSID</th>
+                    <th className="px-4 py-3">Default Pass</th>
+                    <th className="px-4 py-3">Target SSID</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {images.filter(i => i.status === 'done' && i.data).map((img) => (
+                    <tr key={img.id} className="hover:bg-muted/20">
+                      <td className="px-4 py-3 font-mono">{img.data?.serial_number}</td>
+                      <td className="px-4 py-3">{img.data?.default_ssid}</td>
+                      <td className="px-4 py-3 font-mono">{img.data?.default_pass}</td>
+                      <td className="px-4 py-3 font-bold text-primary">{img.data?.target_ssid || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="p-4 border-t border-border bg-muted/30 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowPreview(false)}>Close</Button>
+              <Button onClick={() => { handleDownloadCSV(); setShowPreview(false); }} className="bg-green-600 hover:bg-green-700 text-white">
+                <FileDown className="w-4 h-4 mr-2" /> Download CSV
+              </Button>
+            </div>
+          </MotionWrapper>
+        </div>
+      )}
     </div>
   );
 }
