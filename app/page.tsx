@@ -196,7 +196,7 @@ export default function Scanner() {
                       type="file"
                       multiple
                       accept="image/*"
-                      className="absolute inset-0 opacity-0 cursor-pointer"
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       onChange={handleUpload}
                     />
                   </div>
