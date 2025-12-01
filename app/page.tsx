@@ -23,6 +23,7 @@ interface ScannedImage {
     default_ssid: string;
     default_pass: string;
     target_ssid?: string;
+    new_pass?: string;
   };
 }
 
@@ -129,10 +130,10 @@ export default function Scanner() {
     const readyImages = images.filter(img => img.status === 'done' && img.data);
     if (readyImages.length === 0) return null;
 
-    const headers = ["serial_number", "default_ssid", "default_pass", "target_ssid"];
+    const headers = ["serial_number", "default_ssid", "default_pass", "target_ssid", "new_pass"];
     const csvRows = readyImages.map(img => {
       const d = img.data!;
-      return [d.serial_number, d.default_ssid, d.default_pass, d.target_ssid || ""].join(",");
+      return [d.serial_number, d.default_ssid, d.default_pass, d.target_ssid || "", d.new_pass || ""].join(",");
     });
 
     return [headers.join(","), ...csvRows].join("\n");
@@ -327,6 +328,14 @@ export default function Scanner() {
                                 placeholder="Pass"
                               />
                             </div>
+                            <div className="grid grid-cols-1 gap-2">
+                              <Input
+                                value={img.data.new_pass || ''}
+                                onChange={(e) => updateImageData(img.id, 'new_pass', e.target.value)}
+                                className="h-7 text-xs border-green-500/50"
+                                placeholder="New Password (Optional)"
+                              />
+                            </div>
                           </>
                         ) : (
                           <div className="h-full flex items-center text-sm text-muted-foreground">
@@ -376,6 +385,7 @@ export default function Scanner() {
                     <th className="px-4 py-3">Default SSID</th>
                     <th className="px-4 py-3">Default Pass</th>
                     <th className="px-4 py-3">Target SSID</th>
+                    <th className="px-4 py-3">New Pass</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -385,6 +395,7 @@ export default function Scanner() {
                       <td className="px-4 py-3">{img.data?.default_ssid}</td>
                       <td className="px-4 py-3 font-mono">{img.data?.default_pass}</td>
                       <td className="px-4 py-3 font-bold text-primary">{img.data?.target_ssid || '-'}</td>
+                      <td className="px-4 py-3 font-mono text-green-600">{img.data?.new_pass || '-'}</td>
                     </tr>
                   ))}
                 </tbody>

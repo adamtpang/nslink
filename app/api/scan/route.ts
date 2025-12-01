@@ -24,6 +24,7 @@ export async function POST(req: Request) {
     - default_ssid (Labelled as "2.4G SSID" or just "SSID". If multiple, prefer 2.4G. Example: "B4B@celcomdigi_2.4Ghz")
     - default_pass (Labelled as "Wireless Password/PIN" or "Password")
     - target_ssid (Leave this null, user will input later)
+    - new_pass (Leave this null, user will input later)
 
     If a field is not visible, return null.
     Do not guess.
@@ -62,7 +63,8 @@ export async function POST(req: Request) {
           serial_number: snMatch[1],
           default_ssid: "",
           default_pass: "",
-          target_ssid: null
+          target_ssid: null,
+          new_pass: null
         });
       }
       return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 });
