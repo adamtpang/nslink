@@ -90,4 +90,5 @@ If you are setting this up on a new laptop, you need:
 *   **AI missed a digit**: Always glance at the "Preview CSV" table before downloading. You can edit the fields directly in the Web App before downloading.
 
 ---
-*Built for speed. Built for NS.*
+
+use "rm debug_*.html debug_*.png" to remove debug files

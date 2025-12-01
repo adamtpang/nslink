@@ -23,12 +23,37 @@ def login_to_router(page, user, password):
     try:
         # Wait for any known login field
         try:
-            page.wait_for_selector("input[placeholder='Username'], #pc-login-user, input#userName", timeout=5000)
+            page.wait_for_selector("input[placeholder='Username'], #pc-login-user, input#userName, #usrPwdForm", timeout=5000)
         except:
             print("   ⚠️ Login fields not found immediately. Saving debug info...")
             save_debug_artifact(page, "login_not_found")
             # Continue anyway, might be already logged in?
 
+        # Handle "New User" Creation (Factory Reset State)
+        if page.is_visible("#usrPwdForm") or page.is_visible("#t_newUserTip"):
+            print("   🆕 Factory Reset detected! Creating new user...")
+            try:
+                # Fill New Username (if visible/editable)
+                if page.is_visible("#usr"):
+                    page.fill("#usr", user)
+
+                # Fill New Password
+                if page.is_visible("#newPwd"):
+                    page.fill("#newPwd", password)
+
+                # Confirm New Password
+                if page.is_visible("#cfmPwd"):
+                    page.fill("#cfmPwd", password)
+
+                # Click Confirm
+                if page.is_visible(".quicksetup-cfmBtn"):
+                    print("   ✅ Clicking Confirm for new user...")
+                    page.click(".quicksetup-cfmBtn")
+                    page.wait_for_timeout(3000)
+            except Exception as e:
+                print(f"   ⚠️ New User creation failed: {e}")
+
+        # Standard Login
         if page.is_visible("input[placeholder='Username']"):
             page.fill("input[placeholder='Username']", user)
         elif page.is_visible("#pc-login-user"):
@@ -47,8 +72,20 @@ def login_to_router(page, user, password):
         # Handle "Force Logout" Dialog
         if page.is_visible("text=Only one device can log in at a time"):
             print("   ⚠️ Detected active session. Forcing logout...")
-            if page.is_visible("button:has-text('Log in')"):
-                page.click("button:has-text('Log in')")
+            page.wait_for_timeout(1000)
+
+            clicked = False
+            # Try multiple selectors for the "Log in" or "Yes" button
+            # User provided ID: #confirm-yes
+            for selector in ["#confirm-yes", "button:has-text('Log in')", "button:has-text('Yes')", ".confirm-btn"]:
+                if page.is_visible(selector):
+                    print(f"   🖱️ Clicking force logout button ({selector})...")
+                    page.click(selector)
+                    clicked = True
+                    break
+
+            if not clicked:
+                print("   ⚠️ Could not find 'Log in' button for force logout.")
 
         # VERIFICATION: Check if we are past the login screen
         page.wait_for_timeout(2000)
@@ -95,51 +132,20 @@ def run_wizard_flow(page, config):
         print("   🧙 Running Wizard...")
         page.wait_for_timeout(2000)
 
-        #     page.locator(".icon.checkbox-hover-unchecked").click()
-        #     page.wait_for_timeout(1000)
+        # FORCE: Always click "Quick Setup" to ensure we are at the start of the flow
+        # This handles cases where the router is partially configured or on a different tab
+        if page.is_visible("#qs"):
+            print("   🖱️ Clicking 'Quick Setup' tab to ensure correct flow...")
+            page.click("#qs")
+            page.wait_for_timeout(2000)
 
-        # Wait for textboxes
-        try:
-            page.wait_for_selector("input[type='text']", timeout=5000)
-        except:
-             print("   ⚠️ Wireless settings textboxes not found.")
-             save_debug_artifact(page, "wireless_step_fail")
+        # CHECK: Is the wizard loaded?
+        if not page.is_visible("[id='_region']"):
+            print("   ⚠️ Region selector not found. Attempting to reload...")
+            page.reload()
+            page.wait_for_timeout(3000)
 
-        # We expect 4 fields: SSID 2.4, Pass 2.4, SSID 5, Pass 5
-        textboxes = page.get_by_role("textbox").all()
-        print(f"   Found {len(textboxes)} textboxes.")
-
-        if len(textboxes) >= 4:
-            # 2.4GHz
-            ssid_24 = f"{NEW_SSID} 2.4Ghz"
-            print(f"   ✏️ Setting 2.4GHz SSID: {ssid_24}")
-            textboxes[0].fill(ssid_24)
-
-            print(f"   🔐 Setting 2.4GHz Password: {NEW_WIFI_PASS}")
-            textboxes[1].fill(NEW_WIFI_PASS)
-
-            # 5GHz
-            ssid_5 = f"{NEW_SSID} 5.0Ghz"
-            print(f"   ✏️ Setting 5GHz SSID: {ssid_5}")
-            textboxes[2].fill(ssid_5)
-
-            print(f"   🔐 Setting 5GHz Password: {NEW_WIFI_PASS}")
-            textboxes[3].fill(NEW_WIFI_PASS)
-        else:
-            print(f"   ⚠️ Unexpected number of textboxes ({len(textboxes)}). Trying generic fill...")
-            # Fallback: Fill first SSID/Pass found
-            if len(textboxes) >= 1: textboxes[0].fill(NEW_SSID)
-            if len(textboxes) >= 2: textboxes[1].fill(NEW_WIFI_PASS)
-
-        # Click Next
-        print("   ➡️ Next (Wireless)...")
-        page.get_by_role("button", name="Next").click()
-        page.wait_for_timeout(2000)
-
-        # Step 4: Summary / Save
-        print("   💾 Saving Configuration...")
-        if page.is_visible("button:has-text('Next')"):
-            page.get_by_role("button", name="Next").click()
+            # Try clicking Quick Setup again after reload
         elif page.is_visible("button:has-text('Save')"):
             page.get_by_role("button", name="Save").click()
 
@@ -247,3 +253,70 @@ def run_admin_flow(page, config):
         except:
             pass
         return True
+
+def factory_reset(page, config):
+    """
+    Navigates to System Tools -> Backup & Restore -> Factory Restore
+    """
+    ROUTER_URL = config.get('router_url', "http://192.168.1.1")
+    LOGIN_USER = config['login_user']
+    LOGIN_PASS = config['login_pass']
+
+    print("   🧨 Starting Factory Reset Sequence...")
+
+    try:
+        # 1. Login
+        page.goto(ROUTER_URL)
+        page.wait_for_load_state("networkidle")
+        if not login_to_router(page, LOGIN_USER, LOGIN_PASS):
+             print("   ❌ Login failed. Cannot factory reset.")
+             return False
+
+        # 2. Navigate to Backup & Restore
+        print("   Navigating to 'Advanced'...")
+        if page.is_visible("text=Advanced"):
+            page.click("text=Advanced")
+        elif page.is_visible("#advanced"):
+            page.click("#advanced")
+
+        page.wait_for_timeout(1000)
+
+        print("   Navigating to 'System Tools'...")
+        if page.is_visible("text=System Tools"):
+            page.click("text=System Tools")
+
+        page.wait_for_timeout(1000)
+
+        print("   Navigating to 'Backup & Restore'...")
+        if page.is_visible("a[url='backup_restore.htm']"):
+            page.click("a[url='backup_restore.htm']")
+        elif page.is_visible("text=Backup & Restore"):
+            page.click("text=Backup & Restore")
+
+        page.wait_for_timeout(2000)
+
+        # 3. Click Factory Restore
+        print("   💥 Clicking Factory Restore...")
+        if page.is_visible("#factory_restore"):
+            page.click("#factory_restore")
+        elif page.is_visible("button:has-text('Factory Restore')"):
+            page.click("button:has-text('Factory Restore')")
+
+        page.wait_for_timeout(1000)
+
+        # 4. Confirm
+        print("   ⚠️ Confirming Reset...")
+        if page.is_visible(".confirm-btn"): # Generic class for confirm
+            page.click(".confirm-btn")
+        elif page.is_visible("button:has-text('Yes')"):
+            page.click("button:has-text('Yes')")
+        elif page.is_visible("button:has-text('Restore')"):
+             page.click("button:has-text('Restore')")
+
+        print("   ✅ Factory Reset Triggered! Router should reboot.")
+        return True
+
+    except Exception as e:
+        print(f"   ❌ Factory Reset Failed: {e}")
+        save_debug_artifact(page, "factory_reset_fail")
+        return False
