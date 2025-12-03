@@ -240,37 +240,41 @@ export default function Scanner() {
 
           {/* Right Column: Queue */}
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold">Processing Queue</h2>
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleAnalyzeAll}
-                  disabled={isBatchProcessing || images.length === 0}
-                >
-                  <Play className="w-4 h-4 mr-2" /> Analyze All
-                </Button>
+            <Card className="p-4">
+              <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                <h2 className="text-lg font-semibold">Processing Queue</h2>
+                <div className="flex flex-wrap justify-center gap-2 w-full md:w-auto">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleAnalyzeAll}
+                    disabled={isBatchProcessing || images.length === 0}
+                    className="flex-1 md:flex-none"
+                  >
+                    <Play className="w-4 h-4 mr-2" /> Analyze All
+                  </Button>
 
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowPreview(true)}
-                  disabled={images.filter(i => i.status === 'done').length === 0}
-                >
-                  <Table className="w-4 h-4 mr-2" /> Preview CSV
-                </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowPreview(true)}
+                    disabled={images.filter(i => i.status === 'done').length === 0}
+                    className="flex-1 md:flex-none"
+                  >
+                    <Table className="w-4 h-4 mr-2" /> Preview CSV
+                  </Button>
 
-                <Button
-                  size="sm"
-                  onClick={handleDownloadCSV}
-                  disabled={images.filter(i => i.status === 'done').length === 0}
-                  className="bg-green-600 hover:bg-green-700 text-white"
-                >
-                  <FileDown className="w-4 h-4 mr-2" /> Download CSV
-                </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleDownloadCSV}
+                    disabled={images.filter(i => i.status === 'done').length === 0}
+                    className="bg-green-600 hover:bg-green-700 text-white flex-1 md:flex-none"
+                  >
+                    <FileDown className="w-4 h-4 mr-2" /> Download CSV
+                  </Button>
+                </div>
               </div>
-            </div>
+            </Card>
 
             <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
               {images.length === 0 && (
